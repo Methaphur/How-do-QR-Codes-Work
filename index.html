@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inside a QR Code</title>
+<meta name="description" content="An interactive, animated presentation on how QR codes encode data, correct errors with Reed–Solomon codes, and get scanned from any angle.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wordmark"><i><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>Inside a QR Code</div>
+  <div class="top-actions">
+    <span class="kbd-hint">← → to move · type to change the code</span>
+    <button class="btn" id="theme" type="button" aria-label="Toggle light and dark theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Theme
+    </button>
+  </div>
+</header>
+
+<main class="deck">
+
+<!-- 1 ─────────────────────────────── -->
+<section class="slide" data-id="intro" data-title="Your message, as a QR code">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot"></span>Basics</div>
+      <h1 class="title-h">How QR codes <em>work</em></h1>
+      <p class="lede">A QR code is a grid of black and white squares that stores text, survives scratches and stickers, and can be read at a slant from across a room.</p>
+      <p>This deck builds one from scratch, out of your message, using the same steps a real encoder follows. Then it breaks the code and watches it heal. Every picture is computed live; nothing is pre-drawn.</p>
+      <div class="row">
+        <div class="field"><label for="msg-intro">Your message</label><input id="msg-intro" class="text-input" data-msg maxlength="200" autocomplete="off" spellcheck="false"></div>
+      </div>
+      <div class="row"><span class="caption">Error-correction level</span><div class="seg" data-ecl></div></div>
+      <p class="err-msg" data-msg-error hidden></p>
+      <nav class="toc" aria-label="Contents">
+        <a href="#anatomy" data-goto="anatomy"><span>02</span>Anatomy of a symbol</a>
+        <a href="#bits" data-goto="bits"><span>03</span>Text into bits</a>
+        <a href="#redundancy" data-goto="redundancy"><span>06</span>What is error correction?</a>
+        <a href="#field" data-goto="field"><span>07</span>A field of 256 numbers</a>
+        <a href="#repair" data-goto="repair"><span>09</span>Break it, watch it heal</a>
+        <a href="#finding" data-goto="finding"><span>12</span>Scanning from any angle</a>
+      </nav>
+    </div>
+    <div class="bench">
+      <div class="stage-sq paper"><canvas id="intro-qr" class="qr-canvas" aria-label="QR code of your message"></canvas></div>
+      <div class="row spread">
+        <div class="stat-line" id="intro-stats"></div>
+        <button class="btn" id="intro-replay" type="button">Replay assembly</button>
+      </div>
+      <p class="caption">This is a real, scannable code. Point a phone camera at it, then change the message and scan again.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2 ─────────────────────────────── -->
+<section class="slide" data-id="anatomy" data-title="Anatomy of a symbol">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot"></span>Basics</div>
+      <h2>Anatomy of a symbol</h2>
+      <p>Each square is called a <b>module</b>. Some modules are fixed landmarks that every QR code has in the same place; the rest carry your data. Hover or tap a part to see what it does.</p>
+      <div class="legend" id="anat-legend" style="flex-direction:column;align-items:stretch;gap:.3rem"></div>
+      <p class="caption" id="anat-desc" style="min-height:3.2em">Sizes run from version 1 (21×21) to version 40 (177×177), adding 4 modules per side each step.</p>
+    </div>
+    <div class="bench">
+      <div class="stage-sq paper"><canvas id="anat-qr" class="qr-canvas" aria-label="QR code with highlighted regions"></canvas></div>
+      <p class="caption" id="anat-cap"></p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ─────────────────────────────── -->
+<section class="slide" data-id="bits" data-title="Text into bits">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--data)"></span>Data encoding</div>
+      <h2>Text into bits</h2>
+      <p>Before anything is drawn, your message becomes a stream of bits. It starts with a 4-bit <b>mode indicator</b> and a <b>character count</b>, then the data itself.</p>
+      <p>QR has several modes because packing matters. Digits are grouped in threes: 000–999 needs only 10 bits, because 2<sup>10</sup> = 1024. Uppercase letters, digits and nine symbols form a 45-character alphabet, so pairs fit in 11 bits (45² = 2025 ≤ 2048). Anything else is stored as UTF-8 bytes.</p>
+      <details class="deeper"><summary>Go deeper: why these numbers?</summary><div class="body">
+        <p>Each mode is a small exercise in information theory. A decimal digit carries log₂10 ≈ 3.32 bits of information, so three digits need at least 9.97 bits; 10 bits wastes almost nothing. An alphanumeric pair carries log₂2025 ≈ 10.98 bits, so 11 bits is again nearly perfect.</p>
+        <div class="eq">numeric       3 digits  → 10 bits   (3.33 bits/char)
+alphanumeric  2 chars   → 11 bits   (5.5  bits/char)
+byte          1 byte    →  8 bits   (8    bits/char)</div>
+        <p>Real encoders can also switch modes partway through a message (for example a URL with a long number at the end) to save bits. That is a shortest-path problem, usually solved with dynamic programming.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="field"><label for="msg-bits">Your message</label><input id="msg-bits" class="text-input" data-msg maxlength="200" autocomplete="off" spellcheck="false"></div>
+      <p class="err-msg" data-msg-error hidden></p>
+      <div class="panel"><div class="panel-title"><span>Bit stream</span><span id="bits-total"></span></div><div id="bits-rows"></div></div>
+      <div class="panel"><div class="panel-title"><span>The same message in each mode</span></div><div class="modebars" id="bits-modes"></div>
+        <div class="row" style="margin-top:.7rem"><span class="caption">Try:</span>
+          <button class="btn" type="button" data-try="8675309">8675309</button>
+          <button class="btn" type="button" data-try="HELLO WORLD">HELLO WORLD</button>
+          <button class="btn" type="button" data-try="https://qr.example/ok">a URL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 ─────────────────────────────── -->
+<section class="slide" data-id="codewords" data-title="Bits into codewords">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--data)"></span>Data encoding</div>
+      <h2>Filling the box, one byte at a time</h2>
+      <p>Each version and error-correction level has a fixed number of <span class="k-data">data codewords</span> (bytes). The bit stream is finished off so it fills them exactly:</p>
+      <p>1. Up to four 0s as a <b>terminator</b>.<br>2. More 0s to reach a whole byte.<br>3. The pad bytes <code>11101100</code> (236) and <code>00010001</code> (17), alternating until the space is full.</p>
+      <p>The two pad bytes were chosen to look busy: their alternating bits avoid big blank areas that could confuse a scanner.</p>
+    </div>
+    <div class="bench">
+      <div class="panel"><div class="panel-title"><span>Capacity used</span><span id="cw-cap"></span></div>
+        <div class="bar" id="cw-bar"></div>
+        <div class="legend" style="margin-top:.6rem">
+          <span><i style="background:var(--accent)"></i>header</span><span><i style="background:var(--data)"></i>your data</span><span><i style="background:var(--muted)"></i>terminator + fill</span><span><i style="background:var(--fn)"></i>pad bytes</span>
+        </div>
+      </div>
+      <div class="panel"><div class="panel-title"><span>Bit stream</span></div><div class="ribbon" id="cw-ribbon"></div></div>
+      <div class="panel"><div class="panel-title"><span>Data codewords</span><span>decimal · binary</span></div><div class="cwgrid" id="cw-grid"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 ─────────────────────────────── -->
+<section class="slide" data-id="placement" data-title="Placing the bits">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--data)"></span>Data encoding</div>
+      <h2>The zig-zag snake</h2>
+      <p>The final codeword sequence (your <span class="k-data">data</span> followed by the <span class="k-ec">error-correction</span> bytes we'll compute soon) is laid into the grid starting at the bottom-right corner.</p>
+      <p>Bits travel in columns two modules wide, snaking up, then down, then up again, and step around every landmark. Column 6 is skipped entirely because it holds the vertical timing pattern.</p>
+      <p>Hover a module to see which codeword and bit it holds. Each byte occupies a little 2×4 block, unless it has to bend around a corner.</p>
+    </div>
+    <div class="bench">
+      <div class="stage-sq paper"><canvas id="place-qr" class="qr-canvas" aria-label="Animated data placement"></canvas></div>
+      <div class="row spread">
+        <div class="row">
+          <button class="btn primary" id="place-play" type="button">Pause</button>
+          <button class="btn" id="place-step" type="button">Next byte</button>
+          <button class="btn" id="place-reset" type="button">Restart</button>
+          <label class="btn" style="gap:.4rem"><input type="checkbox" id="place-path" checked> path</label>
+        </div>
+        <div class="row" style="min-width:10rem;flex:1;max-width:16rem"><span class="caption">speed</span><input type="range" id="place-speed" min="1" max="60" value="14" aria-label="Animation speed"></div>
+      </div>
+      <p class="stat-line" id="place-info">&nbsp;</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6 ─────────────────────────────── -->
+<section class="slide" data-id="redundancy" data-title="What is error correction?">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ec)"></span>Error correction</div>
+      <h2>What is error correction?</h2>
+      <p>A QR code gets smudged, torn, printed badly, or partly covered by a logo. Some modules will be read wrong. <b>Error correction</b> adds carefully computed extra information so the reader can work out what the original was.</p>
+      <p>Try it: click bits in the <em>received</em> rows to flip them, as if the channel corrupted them. Then compare three ways of adding redundancy.</p>
+      <p><b>Repetition</b> is simple but triples the size. <b>Parity</b> is cheap but can only say "something is wrong". <b>Hamming(7,4)</b> is cleverer. Its three check bits produce a <em>syndrome</em> that names the flipped position. That idea of computing exactly where the error is sits at the heart of QR's Reed–Solomon code.</p>
+      <details class="deeper"><summary>Go deeper: errors, erasures, and the budget</summary><div class="body">
+        <p>Reed–Solomon works on whole bytes. A byte with 1 wrong bit or 8 wrong bits counts as one error, which makes it ideal for smudges and stains that wipe out clusters of modules.</p>
+        <p>With n − k check bytes, a decoder can fix <i>e</i> errors at unknown places and <i>s</i> erasures (bytes known to be bad) as long as:</p>
+        <div class="eq">2e + s ≤ n − k</div>
+        <p>Finding an error costs two check bytes: one to locate it and one to compute its value.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <div class="panel-title"><span>Message (click to change)</span></div>
+        <div class="cells" id="red-msg"></div>
+      </div>
+      <div class="panel codes" id="red-codes"></div>
+      <div class="row"><button class="btn" id="red-reset" type="button">Clear flips</button><button class="btn" id="red-rand" type="button">Flip one random bit in each</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ─────────────────────────────── -->
+<section class="slide" data-id="field" data-title="A field of 256 numbers">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ec)"></span>The math</div>
+      <h2>A field of 256 numbers</h2>
+      <p>Error correction needs real algebra on bytes: adding, multiplying, dividing, and solving equations. Ordinary arithmetic fails here. 200 + 100 doesn't fit in a byte, and dividing by 2 leaves fractions.</p>
+      <p>The fix is a <b>finite field</b>, called GF(2⁸) or GF(256). It has exactly 256 elements (every byte), and the arithmetic always stays inside:</p>
+      <p><b>Addition is XOR.</b> No carries, and every number is its own negative, so subtracting is the same as adding.</p>
+      <p><b>Multiplication goes through powers of α = 2.</b> Doubling repeatedly, and folding back with the polynomial 285 (0x11D) whenever the result spills past 8 bits, visits all 255 non-zero bytes before repeating. Every non-zero byte is some αⁱ, so multiplying becomes adding exponents.</p>
+      <details class="deeper"><summary>Go deeper: why x⁸ + x⁴ + x³ + x² + 1?</summary><div class="body">
+        <p>Think of a byte as a polynomial with 0/1 coefficients: 0b10011 = x⁴ + x + 1. Field elements are these polynomials, taken modulo an irreducible degree-8 polynomial, much like clock arithmetic modulo a prime.</p>
+        <div class="eq">p(x) = x⁸ + x⁴ + x³ + x² + 1   →   1 0001 1101 = 0x11D = 285
+α⁸ = α⁴ + α³ + α² + 1          (because p(α) = 0)</div>
+        <p>This p(x) is also <i>primitive</i>: α = x generates every non-zero element. That is what makes the log and antilog tables work. Every non-zero element has an inverse (a⁻¹ = α²⁵⁵⁻ˡᵒᵍ ᵃ), so division is always possible.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <div class="panel-title"><span>Powers of α: the cycle of 255</span><span id="gf-readout" class="nocase"></span></div>
+        <div class="stage-sq"><canvas id="gf-ring" class="qr-canvas" aria-label="Cycle of the 255 powers of alpha"></canvas></div>
+        <div class="row" style="margin-top:.5rem">
+          <button class="btn primary" id="gf-play" type="button">Pause</button>
+          <input type="range" id="gf-i" min="0" max="254" value="0" style="flex:1" aria-label="Exponent i">
+        </div>
+        <p class="eq" id="gf-step" style="margin-top:.6rem"></p>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><span>Byte calculator</span></div>
+        <div class="row"><label class="caption" for="gf-a">a</label><input type="number" class="num-in" id="gf-a" min="0" max="255" value="200"><label class="caption" for="gf-b">b</label><input type="number" class="num-in" id="gf-b" min="0" max="255" value="100"></div>
+        <div class="calc" style="margin-top:.7rem"><div class="out" id="gf-add"></div><div class="out" id="gf-mul"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 ─────────────────────────────── -->
+<section class="slide" data-id="reed-solomon" data-title="Reed–Solomon encoding">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ec)"></span>The math</div>
+      <h2>Reed–Solomon: division makes the check bytes</h2>
+      <p>Treat your data codewords as the coefficients of a polynomial m(x). Multiply by xⁿ to make room for n check bytes, then divide by a fixed <b>generator polynomial</b>:</p>
+      <p class="eq">g(x) = (x − α⁰)(x − α¹)(x − α²) ··· (x − αⁿ⁻¹)</p>
+      <p>The <span class="k-ec">remainder</span> is the error-correction codewords. Data followed by remainder forms a polynomial that divides evenly by g(x), so it is zero at every α⁰ … αⁿ⁻¹. The decoder relies on exactly that property.</p>
+      <p>Each step: take the leading byte, multiply g(x) by it, XOR it away. Watch it run on your own codewords.</p>
+      <details class="deeper"><summary>Go deeper: blocks and interleaving</summary><div class="body">
+        <p>Larger codes split the data into several blocks, each with its own check bytes. Then the bytes are <b>interleaved</b>: byte 1 of every block, then byte 2 of every block, and so on. A coffee stain that wipes out a run of neighbouring bytes is spread across many blocks, and each block only sees a few errors.</p>
+        <div class="tape" id="rs-inter" aria-label="Final codeword order coloured by block"></div>
+        <p class="caption" id="rs-inter-cap"></p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="panel">
+        <div class="panel-title"><span>Robustness vs capacity at version <span id="rs-ver"></span></span><div class="seg" data-ecl></div></div>
+        <div id="rs-levels" class="modebars"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><span>Long division in GF(256) · block 1</span><span id="rs-prog" class="nocase"></span></div>
+        <div class="tape" id="rs-tape"></div>
+        <p class="caption" style="margin:.6rem 0 .3rem">g(x) as exponents of α, highest power first:</p>
+        <div class="tape" id="rs-gen"></div>
+        <div class="divgrid" id="rs-div" style="margin-top:.8rem"></div>
+        <div class="row" style="margin-top:.7rem">
+          <button class="btn primary" id="rs-play" type="button">Play</button>
+          <button class="btn" id="rs-step" type="button">Step</button>
+          <button class="btn" id="rs-reset" type="button">Restart</button>
+          <button class="btn" id="rs-end" type="button">Finish</button>
+        </div>
+      </div>
+      <div class="panel"><div class="panel-title"><span>Remainder = error-correction codewords</span></div><div class="tape" id="rs-out"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 ─────────────────────────────── -->
+<section class="slide" data-id="repair" data-title="Break it, watch it heal">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ec)"></span>Error correction</div>
+      <h2>Break it, watch it heal</h2>
+      <p>Draw on the code, splash coffee on it, or stamp a logo in the middle. The reader runs live on every change. It reads the modules, removes the mask, splits the bytes back into blocks and runs a full Reed–Solomon decoder:</p>
+      <p><b>1. Syndromes.</b> Evaluate the received polynomial at α⁰…αⁿ⁻¹. All zeros means no damage.<br>
+      <b>2. Berlekamp–Massey.</b> Find the error-locator polynomial Λ(x), whose roots point at the bad bytes.<br>
+      <b>3. Chien search.</b> Try every position to find those roots.<br>
+      <b>4. Forney.</b> Compute how wrong each bad byte is, and XOR the fix in.</p>
+      <p>Push past the limit and decoding fails. Sometimes it is worse: the code lands on a <i>different</i> valid message.</p>
+      <div class="row"><span class="caption">Error-correction level</span><div class="seg" data-ecl></div></div>
+    </div>
+    <div class="bench">
+      <div class="toolbar" role="toolbar" aria-label="Damage tools">
+        <button class="btn is-on" data-tool="ink" type="button">Marker</button>
+        <button class="btn" data-tool="white" type="button">White-out</button>
+        <button class="btn" data-act="stain" type="button">Coffee stain</button>
+        <button class="btn" data-act="logo" type="button">Stamp logo</button>
+        <button class="btn" data-act="noise" type="button">Sprinkle noise</button>
+        <button class="btn" data-act="clear" type="button">Clean</button>
+      </div>
+      <div class="stage-sq paper"><canvas id="rep-qr" class="qr-canvas" aria-label="QR code you can damage by drawing"></canvas></div>
+      <div class="result" id="rep-result"></div>
+      <div class="panel"><div class="panel-title"><span>Damaged bytes per block (vs. what it can fix)</span><span id="rep-sum"></span></div><div class="blockbars" id="rep-blocks"></div></div>
+      <div class="panel"><div class="panel-title"><span>Decoder working, block 1</span></div><div class="mathlog" id="rep-math"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 ─────────────────────────────── -->
+<section class="slide" data-id="masking" data-title="Masking">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--fn)"></span>Finishing touches</div>
+      <h2>Masking: making the pattern easy to read</h2>
+      <p>Raw data can produce awkward patterns: big blank patches, long stripes, or shapes that look like a finder pattern. Any of these can mislead a scanner.</p>
+      <p>So the encoder XORs the data area with one of 8 fixed <b>mask patterns</b>, scores each result with four penalty rules, and keeps the lowest score. The reader undoes it with the same XOR, because (data ⊕ mask) ⊕ mask = data.</p>
+      <details class="deeper"><summary>Go deeper: the four penalty rules</summary><div class="body">
+        <p><b>N1</b> runs of 5+ same-colour modules in a row or column: 3 points, +1 per extra module.<br>
+        <b>N2</b> every 2×2 block of one colour: 3 points.<br>
+        <b>N3</b> the pattern 1:1:3:1:1 next to 4 light modules, which looks like a finder: 40 points.<br>
+        <b>N4</b> dark-module share away from 50%: 10 points per 5%.</p>
+        <p>This is a brute-force optimization: try all 8 options and pick the best. It is cheap because the search space is tiny.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="row spread">
+        <div class="seg" id="mask-view"><button type="button" data-v="masked" class="is-on">Masked</button><button type="button" data-v="raw">No mask</button><button type="button" data-v="pattern">Pattern only</button></div>
+        <span class="stat-line" id="mask-formula"></span>
+      </div>
+      <div class="stage-sq paper"><canvas id="mask-qr" class="qr-canvas" aria-label="QR code with selected mask"></canvas></div>
+      <div class="maskgrid" id="mask-grid"></div>
+      <div class="panel"><div class="panel-title"><span>Penalty breakdown · mask <span id="mask-cur"></span></span><span id="mask-total"></span></div><div id="mask-pen" style="display:flex;flex-direction:column;gap:.35rem"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ─────────────────────────────── -->
+<section class="slide" data-id="format" data-title="Format information">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--fn)"></span>Finishing touches</div>
+      <h2>Format info: a tiny code that protects the settings</h2>
+      <p>Before reading anything else, the scanner needs two facts: the <span class="k-data">error-correction level</span> (2 bits) and the <span class="k-data">mask</span> (3 bits). Those 5 bits get their own error correction, a <b>BCH(15,5) code</b>. It is computed with polynomial division over plain bits, using the generator 10100110111.</p>
+      <p>The 10-bit remainder is appended, the result is XORed with <code>101010000010010</code> so it can never be all zeros, and the 15 bits are written twice around the finder patterns.</p>
+      <details class="deeper"><summary>Go deeper: why it is so robust</summary><div class="body">
+        <p>There are only 32 valid format words, and any two differ in at least 7 of 15 bits. A reader compares what it sees with all 32 and picks the nearest. That fixes up to 3 wrong bits per copy, and there are two copies.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="row"><span class="caption">EC level</span><div class="seg" id="fmt-ecl"></div><span class="caption">Mask</span><div class="seg" id="fmt-mask"></div></div>
+      <div class="panel"><div class="panel-title"><span>BCH division (bits)</span></div><div class="binlines" id="fmt-div"></div></div>
+      <div class="panel"><div class="panel-title"><span>15 format bits, bit 14 → bit 0 · hover one</span></div><div class="fbits" id="fmt-bits"></div></div>
+      <div class="stage-sq paper" style="width:min(100%,360px)"><canvas id="fmt-qr" class="qr-canvas" aria-label="Positions of the format bits"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 ─────────────────────────────── -->
+<section class="slide" data-id="finding" data-title="Finding the code">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ok)"></span>Scanning</div>
+      <h2>Finding the code at any angle</h2>
+      <p>A camera frame is just pixels. The scanner first turns them into black and white (<b>binarization</b>), then scans across them looking for one signature: <b>dark : light : dark : light : dark in the ratio 1 : 1 : 3 : 1 : 1</b>.</p>
+      <p>That ratio is the trick. Any straight line through the centre of a finder pattern crosses its rings in the same proportions, whatever the angle, distance, or size. Ratios survive rotation and scaling, so the scanner never needs to know which way is up in advance.</p>
+      <p>Drag the yellow handles to move the scan line, rotate the code, then sweep to scan row by row as a real decoder does. Three clusters of hits mark three finders. The corner between the other two is top-left, and a cross product tells which of the others is top-right. Now the code's orientation is known.</p>
+      <details class="deeper"><summary>Go deeper: global vs adaptive threshold</summary><div class="body">
+        <p>Turn on uneven lighting. With one global threshold, the shadowed white paper falls below 50% grey and turns black, and the finder ratios disappear. An <b>adaptive threshold</b> compares each pixel with the average of its neighbourhood (here a 25×25 window, using a summed-area table so each average costs four lookups).</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="stage-sq"><canvas id="find-cv" class="qr-canvas" aria-label="Rotatable QR scene with scan line"></canvas></div>
+      <div class="row">
+        <span class="caption">Rotate</span><input type="range" id="find-rot" min="0" max="360" value="22" style="flex:1;min-width:8rem" aria-label="Rotation">
+        <button class="btn" id="find-spin" type="button">Spin</button>
+      </div>
+      <div class="row">
+        <label class="btn" style="gap:.4rem"><input type="checkbox" id="find-light"> uneven lighting</label>
+        <div class="seg" id="find-thr"><button type="button" data-v="adaptive" class="is-on">Adaptive</button><button type="button" data-v="global">Global</button></div>
+        <label class="btn" style="gap:.4rem"><input type="checkbox" id="find-bin"> show binarized</label>
+        <button class="btn primary" id="find-sweep" type="button">Sweep rows</button>
+      </div>
+      <div class="panel"><div class="panel-title"><span>Runs along the scan line</span><span class="found nocase" id="find-found"></span></div><div class="runs" id="find-runs"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 ─────────────────────────────── -->
+<section class="slide" data-id="perspective" data-title="Undoing perspective">
+  <div class="slide-inner">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot" style="--chap:var(--ok)"></span>Scanning</div>
+      <h2>Undoing perspective</h2>
+      <p>Photographed at a slant, the square grid becomes a skewed quadrilateral and the modules shrink with distance. The fix is projective geometry. A <b>homography</b> is a 3×3 matrix that maps any flat square onto any four-cornered view of it.</p>
+      <p>The scanner knows where four points <i>should</i> be: the centres of the three finders and the alignment pattern. It sees where they <i>are</i>. Four point pairs give eight equations, enough to solve for the eight unknowns of H. Then it samples the photo at the centre of every module.</p>
+      <p>Drag the four markers to tilt the paper. The right panel shows what the scanner reconstructs.</p>
+      <details class="deeper"><summary>Go deeper: the equations</summary><div class="body">
+        <div class="eq">[x']   [h11 h12 h13] [u]
+[y'] ~ [h21 h22 h23] [v]      x = x'/w,  y = y'/w
+[w ]   [h31 h32  1 ] [1]
+
+for each of 4 point pairs:
+  h11·u + h12·v + h13 − h31·u·x − h32·v·x = x
+  h21·u + h22·v + h23 − h31·u·y − h32·v·y = y</div>
+        <p>Solving the 8×8 linear system (Gaussian elimination) gives H. Larger versions have a whole lattice of alignment patterns, so a scanner can fit H locally and cope with paper that bends.</p>
+      </div></details>
+    </div>
+    <div class="bench">
+      <div class="twocol">
+        <div><div class="panel-title"><span>Camera view</span></div><canvas id="persp-cam" class="qr-canvas" aria-label="Tilted QR with draggable reference points"></canvas></div>
+        <div><div class="panel-title"><span>Scanner's reconstruction</span></div><canvas id="persp-flat" class="qr-canvas paper" aria-label="Rectified QR sampled through the homography"></canvas></div>
+      </div>
+      <div class="row">
+        <label class="btn" style="gap:.4rem"><input type="checkbox" id="persp-grid" checked> sampling grid</label>
+        <button class="btn" id="persp-tilt" type="button">Random tilt</button>
+        <button class="btn" id="persp-reset" type="button">Face on</button>
+      </div>
+      <div class="panel"><div class="panel-title"><span>H (module space → camera pixels)</span><span id="persp-read" class="found nocase"></span></div><div class="hmat" id="persp-h"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 ─────────────────────────────── -->
+<section class="slide" data-id="pipeline" data-title="The whole pipeline">
+  <div class="slide-inner wide">
+    <div class="prose">
+      <div class="eyebrow"><span class="dot"></span>The big picture</div>
+      <h2>Computer science and mathematics, end to end</h2>
+      <p>A QR code is a small stack of ideas, each solving one problem. Click any stage to revisit it.</p>
+    </div>
+    <div class="pipeline">
+      <div class="pipe" id="pipe-enc"><span class="lane">Encoding (printer side)</span></div>
+      <div class="pipe" id="pipe-dec"><span class="lane">Decoding (camera side)</span></div>
+    </div>
+    <div class="ideas">
+      <div class="idea"><div class="pair"><span>CS</span><span>Data compression</span></div><h3>Bit packing</h3><p>Three digits → 10 bits, two letters → 11 bits. Choosing the right mode is a variable-length encoding problem; mixing modes optimally is dynamic programming.</p></div>
+      <div class="idea"><div class="pair"><span>Math</span><span>Abstract algebra</span></div><h3>Finite fields</h3><p>GF(2⁸): 256 bytes with XOR for addition and polynomial arithmetic mod x⁸+x⁴+x³+x²+1 for multiplication. Every non-zero byte has an inverse.</p></div>
+      <div class="idea"><div class="pair"><span>Math</span><span>Coding theory</span></div><h3>Reed–Solomon codes</h3><p>Data as a polynomial; check bytes as a remainder. Errors show up as non-zero syndromes, Berlekamp–Massey finds the locator, Chien and Forney fix the values.</p></div>
+      <div class="idea"><div class="pair"><span>CS</span><span>Systems</span></div><h3>Interleaving</h3><p>Spreading each block's bytes across the symbol turns one big burst of damage into a few small errors per block.</p></div>
+      <div class="idea"><div class="pair"><span>CS</span><span>Optimization</span></div><h3>Masking</h3><p>Exhaustive search over 8 XOR patterns, scored by a hand-designed cost function, keeps the image scanner-friendly.</p></div>
+      <div class="idea"><div class="pair"><span>Math</span><span>Cyclic codes</span></div><h3>BCH format info</h3><p>5 bits become 15 bits with a minimum distance of 7. Nearest-codeword decoding fixes up to 3 bit errors per copy.</p></div>
+      <div class="idea"><div class="pair"><span>CS</span><span>Computer vision</span></div><h3>Detection</h3><p>Adaptive thresholding with summed-area tables, then run-length matching of a ratio that does not change under rotation or scaling.</p></div>
+      <div class="idea"><div class="pair"><span>Math</span><span>Projective geometry</span></div><h3>Homography</h3><p>Four point pairs, eight linear equations, one 3×3 matrix that undoes perspective so every module can be sampled at its centre.</p></div>
+    </div>
+    <p class="caption" style="max-width:70ch">The QR code was invented in 1994 by Masahiro Hara's team at Denso Wave to track car parts faster than barcodes allowed ("Quick Response"). It is standardised as ISO/IEC 18004. Reed–Solomon codes date from 1960 (Irving Reed and Gustave Solomon) and also protect CDs, DVDs, deep-space probes and RAID storage.</p>
+  </div>
+</section>
+
+</main>
+
+<nav class="navbar" aria-label="Slides">
+  <button class="btn" id="prev" type="button" aria-label="Previous slide">← Prev</button>
+  <div class="modules"></div>
+  <span class="counter"></span>
+  <button class="btn primary" id="next" type="button" aria-label="Next slide">Next →</button>
+</nav>
+
+<script src="js/gf256.js"></script>
+<script src="js/reedsolomon.js"></script>
+<script src="js/qrcode.js"></script>
+<script src="js/render.js"></script>
+<script src="js/deck.js"></script>
+<script src="js/slides/intro.js"></script>
+<script src="js/slides/anatomy.js"></script>
+<script src="js/slides/encoding.js"></script>
+<script src="js/slides/placement.js"></script>
+<script src="js/slides/redundancy.js"></script>
+<script src="js/slides/field.js"></script>
+<script src="js/slides/reedsolomon.js"></script>
+<script src="js/slides/repair.js"></script>
+<script src="js/slides/masking.js"></script>
+<script src="js/slides/format.js"></script>
+<script src="js/slides/finding.js"></script>
+<script src="js/slides/perspective.js"></script>
+<script src="js/slides/pipeline.js"></script>
+</body>
+</html>
